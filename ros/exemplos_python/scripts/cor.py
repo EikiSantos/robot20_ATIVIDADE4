@@ -15,7 +15,7 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
 import cormodule
-
+from sensor_msgs.msg import LaserScan
 
 bridge = CvBridge()
 
@@ -29,6 +29,18 @@ area = 0.0 # Variavel com a area do maior contorno
 # Só usar se os relógios ROS da Raspberry e do Linux desktop estiverem sincronizados. 
 # Descarta imagens que chegam atrasadas demais
 check_delay = False 
+
+def scaneou(dado):
+	#print("Faixa valida: ", dado.range_min , " - ", dado.range_max )
+	#print("Leituras:")
+	#print(np.array(dado.ranges).round(decimals=2))
+	k = np.array(dado.ranges).round(decimals=2)
+	global scan_frente
+	scan_frente = [k[-8],k[-7],k[-6],k[-5],k[-4],k[-3],k[-2],k[-1],k[0],k[1],k[2],k[3],k[4],k[5],k[6],k[7],k[8]]
+	#print("Intensities")
+	#print(np.array(dado.intensities).round(decimals=2))
+
+
 
 # A função a seguir é chamada sempre que chega um novo frame
 def roda_todo_frame(imagem):
@@ -82,7 +94,7 @@ if __name__=="__main__":
 
 	recebedor = rospy.Subscriber(topico_imagem, CompressedImage, roda_todo_frame, queue_size=4, buff_size = 2**24)
 	print("Usando ", topico_imagem)
-
+	recebe_scan = rospy.Subscriber("/scan", LaserScan, scaneou)
 	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
 
 	try:
@@ -92,13 +104,29 @@ if __name__=="__main__":
 			if len(media) != 0 and len(centro) != 0:
 				print("Média dos vermelhos: {0}, {1}".format(media[0], media[1]))
 				print("Centro dos vermelhos: {0}, {1}".format(centro[0], centro[1]))
+				minimo = min(scan_frente)
+				print (scan_frente)
+				print ("Scann")
+				print ("Menor termo: ",minimo)
 
-				if (media[0] > centro[0]):
-					vel = Twist(Vector3(0,0,0), Vector3(0,0,-0.1))
-				if (media[0] < centro[0]):
-					vel = Twist(Vector3(0,0,0), Vector3(0,0,0.1))
+
+				if minimo>0.8:
+					if (media[0] - centro[0] > 2) :
+						vel = Twist(Vector3(0,0,0), Vector3(0,0,-0.1))
+					if (media[0] - centro[0] < 2):
+						vel = Twist(Vector3(0,0,0), Vector3(0,0,0.1))
+					if (media[0] - centro[0]> -2.1):
+						if (media[0] - centro[0]< 2.1):
+							vel = Twist(Vector3(0.08,0,0), Vector3(0,0,0))
+				if minimo<0.9:
+					if minimo<0.27:
+						vel = Twist(Vector3(0.00,0,0),Vector3(0,0,0))
+					else:
+						vel = Twist(Vector3(0.04,0,0),Vector3(0,0,-0.00005))
+				
 			velocidade_saida.publish(vel)
 			rospy.sleep(0.1)
 
 	except rospy.ROSInterruptException:
 	    print("Ocorreu uma exceção com o rospy")
+
